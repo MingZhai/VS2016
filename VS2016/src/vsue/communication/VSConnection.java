@@ -17,7 +17,6 @@ public class VSConnection
         _socket = socket;
     }
     
-
     public void sendChunk(byte[]chunk) throws IOException // Todo
     {
         _socket.getOutputStream().write(chunk);
