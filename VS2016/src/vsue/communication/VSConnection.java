@@ -13,7 +13,7 @@ public class VSConnection
             throw new IllegalArgumentException("The argument 'socket' must not be null.");
         
         if(!socket.isConnected() || socket.isClosed())
-            throw new IllegalArgumentException("The socket must connected but not closed yet.");
+            throw new IllegalArgumentException("The socket must be connected but not closed yet.");
         
         _socket = socket;
     }
@@ -23,12 +23,12 @@ public class VSConnection
         int length = chunk.length;
         
         int start = 0;
-        int end = 3;
+        int end = 4;
         int iter = 1;
         
         if(!ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN))
         {
-            start = 3;
+            start = 4;
             end = 0;
             iter = -1;
         }
@@ -47,12 +47,12 @@ public class VSConnection
         int length = 0;
         
         int start = 0;
-        int end = 3;
+        int end = 4;
         int iter = 1;
         
         if(!ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN))
         {
-            start = 3;
+            start = 4;
             end = 0;
             iter = -1;
         }

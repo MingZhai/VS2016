@@ -10,7 +10,7 @@ public class VSClient
 {
     public static void main(String[] args) throws UnknownHostException, IOException, ClassNotFoundException
     {
-        Socket socket = new Socket("faui02b", 12348);
+        Socket socket = new Socket("localhost", 12348);
         
         VSConnection connection = new VSConnection(socket);
         VSObjectConnection objConnection = new VSObjectConnection(connection);
