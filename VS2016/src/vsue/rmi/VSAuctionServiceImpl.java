@@ -6,15 +6,13 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 public class VSAuctionServiceImpl implements VSAuctionService
 {
     private final ArrayList<InternalAuction> _auctions = new ArrayList<>();
     
     @Override
-    public synchronized void registerAuction(VSAuction auction, int duration, VSAuctionEventHandler handler) throws VSAuctionException, RemoteException
+    public synchronized void registerAuction(VSAuction auction, int duration, VSAuctionEventHandler handler) throws VSAuctionException
     {
         for(InternalAuction element : _auctions)
             if(element.getAuction().getName().equals(auction.getName()))
@@ -26,7 +24,7 @@ public class VSAuctionServiceImpl implements VSAuctionService
     }
 
     @Override
-    public synchronized VSAuction[] getAuctions() throws RemoteException
+    public synchronized VSAuction[] getAuctions()
     {
         VSAuction[] result = new VSAuction[_auctions.size()];
         
@@ -39,7 +37,7 @@ public class VSAuctionServiceImpl implements VSAuctionService
     }
 
     @Override
-    public  boolean placeBid(String userName, String auctionName, int price, VSAuctionEventHandler handler) throws VSAuctionException, RemoteException
+    public  boolean placeBid(String userName, String auctionName, int price, VSAuctionEventHandler handler) throws VSAuctionException
     {
     	InternalAuction auction = null;
     	synchronized(this)
@@ -103,7 +101,7 @@ public class VSAuctionServiceImpl implements VSAuctionService
             return _biddenAmount;
         }
         
-        public void setBiddenAmount(int value) throws RemoteException // TODO: It would be clearer to catch the exception
+        public void setBiddenAmount(int value)
         {
             if(value <= 0)
                 throw new IllegalArgumentException("The argument 'value' must neither be zero nor negative.");
@@ -136,20 +134,36 @@ public class VSAuctionServiceImpl implements VSAuctionService
         }
         
         // The user won the auction.
-        public void won() throws RemoteException
+        public void won()
         {
             for(VSAuctionEventHandler handler : _handlers)
             {
-                handler.handleEvent(VSAuctionEventType.AUCTION_WON, _auction.getAuction());
+                try 
+                {
+                    handler.handleEvent(VSAuctionEventType.AUCTION_WON, _auction.getAuction());
+                }
+                catch (RemoteException exc) 
+                {
+                    System.out.println("Error on callback: ");
+                    System.out.println(exc);
+                }
             }
         }
         
         // The user was overbidden.
-        public void overbid() throws RemoteException // TODO: It would be clearer to catch the exception
+        public void overbid()
         {
             for(VSAuctionEventHandler handler : _handlers)
             {
-                handler.handleEvent(VSAuctionEventType.HIGHER_BID, _auction.getAuction());
+                try 
+                {
+                    handler.handleEvent(VSAuctionEventType.HIGHER_BID, _auction.getAuction());
+                }
+                catch (RemoteException exc) 
+                {
+                    System.out.println("Error on callback: ");
+                    System.out.println(exc);
+                }
             }
         }
     }
@@ -185,15 +199,7 @@ public class VSAuctionServiceImpl implements VSAuctionService
                 @Override
                 public void run()
                 {
-                    try
-                    {
-                        end(); // We are not allowed to rethrow the possible exception here. See TODO
-                    }
-                    catch (RemoteException ex)
-                    {
-                        System.err.println("Error in remote connection: ");
-                        System.err.println(ex.getMessage());
-                    }
+                  end();
                 }
             }, (long)duration * 1000);
         }
@@ -225,7 +231,7 @@ public class VSAuctionServiceImpl implements VSAuctionService
             return null;
         }
         
-        public AuctionUser addUser(String name, int biddenAmount) throws RemoteException // TODO: It would be clearer to catch the exception
+        public AuctionUser addUser(String name, int biddenAmount)
         {
             if(name == null)
                 throw new IllegalArgumentException("The argument 'name' must not be null.");
@@ -247,7 +253,7 @@ public class VSAuctionServiceImpl implements VSAuctionService
             return _highest;
         }
         
-        void tryOverbidHighest(AuctionUser user) throws RemoteException // TODO: It would be clearer to catch the exception
+        void tryOverbidHighest(AuctionUser user)
         {
             if(user.getBiddenAmount() > _auction.getPrice() || 
                (_highest == null && user.getBiddenAmount() == _auction.getPrice()))
@@ -265,15 +271,22 @@ public class VSAuctionServiceImpl implements VSAuctionService
             }
         }
         
-        private void end() throws RemoteException // TODO: It would be clearer to catch the exception
+        private void end()
         {
-            
             if(_highest != null)
             {
                 _highest.won();
             }
             
-            _handler.handleEvent(VSAuctionEventType.AUCTION_END, _auction);
+            try 
+            {
+                _handler.handleEvent(VSAuctionEventType.AUCTION_END, _auction);
+            } 
+            catch (RemoteException exc) 
+            {
+                System.out.println("Error on callback: ");
+                System.out.println(exc);
+            }
         }
     }
 }
