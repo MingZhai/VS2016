@@ -22,18 +22,9 @@ public class VSConnection
     {
         int length = chunk.length;
         
-        int start = 0;
-        int end = 4;
-        int iter = 1;
-        
-        if(!ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN))
-        {
-            start = 4;
-            end = 0;
-            iter = -1;
-        }
-        
-        for(int i = start; i != end; i += iter)
+        for(int i = (ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN) ? 0 : 4); 
+                i != (ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN) ? 4 : 0); 
+                i += (ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN) ? 1 : -1))
         {
             _socket.getOutputStream().write((length >> 8*i) & 0xFF);
         }
@@ -45,19 +36,10 @@ public class VSConnection
     public byte[] receiveChunk() throws IOException
     {
         int length = 0;
-        
-        int start = 0;
-        int end = 4;
-        int iter = 1;
-        
-        if(!ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN))
-        {
-            start = 4;
-            end = 0;
-            iter = -1;
-        }
-        
-        for(int i = start; i != end; i += iter)
+
+        for(int i = (ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN) ? 0 : 4); 
+                i != (ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN) ? 4 : 0); 
+                i += (ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN) ? 1 : -1))
         {
             int b = _socket.getInputStream().read();
             
