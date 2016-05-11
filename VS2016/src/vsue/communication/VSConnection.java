@@ -18,7 +18,7 @@ public class VSConnection
         _socket = socket;
     }
     
-    public void sendChunk(byte[]chunk) throws IOException // Todo
+    public void sendChunk(byte[]chunk) throws IOException
     {
         int length = chunk.length;
         
@@ -42,7 +42,7 @@ public class VSConnection
         _socket.getOutputStream().flush();
     }
     
-    public byte[] receiveChunk() throws IOException //Todo
+    public byte[] receiveChunk() throws IOException
     {
         int length = 0;
         
