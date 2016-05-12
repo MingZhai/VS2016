@@ -70,15 +70,15 @@ public class VSObjectConnection
         
         do
         {
-        	bytes = _connection.receiveChunk();
+            bytes = _connection.receiveChunk();
         } while(bytes == null || bytes.length == 0);
 
 
-        System.out.println("received bytes:");
-        for(byte b : bytes)
-        {
-        	System.out.println(b);
-        }
+        //System.out.println("received bytes:");
+        //for(byte b : bytes)
+        //{
+        //    System.out.println(b);
+        //}
         
         ByteArrayInputStream bis = new ByteArrayInputStream(bytes);
         ObjectInput in = null;

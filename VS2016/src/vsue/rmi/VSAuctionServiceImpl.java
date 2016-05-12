@@ -1,292 +1,179 @@
 package vsue.rmi;
 
 import java.rmi.RemoteException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.Timer;
 import java.util.TimerTask;
 
 public class VSAuctionServiceImpl implements VSAuctionService
 {
-    private final ArrayList<InternalAuction> _auctions = new ArrayList<>();
-    
+
+    private final HashMap<String, VSAuction> _auctions = new HashMap<>();
+    private final HashMap<VSAuction, VSAuctionEventHandler> _highest = new HashMap<>();
+    private final Object _lock = new Object();
+    private final Timer _timer = new Timer();
+
     @Override
-    public synchronized void registerAuction(VSAuction auction, int duration, VSAuctionEventHandler handler) throws VSAuctionException
+    public void registerAuction(VSAuction auction, int duration, VSAuctionEventHandler handler) throws VSAuctionException
     {
-        for(InternalAuction element : _auctions)
-            if(element.getAuction().getName().equals(auction.getName()))
+        // Push the auction to the _auctions field in a thread safe manner.
+        synchronized (_lock)
+        {
+            // There is already an auction with the specified name present.
+            if (_auctions.containsKey(auction.getName()))
+            {
                 throw new VSAuctionException("An auction with this name is already registered.");
-        
-        InternalAuction intAuc = new InternalAuction(auction, handler, duration);
-        
-        _auctions.add(intAuc);
+            }
+
+            _auctions.put(auction.getName(), auction);
+        }
+
+        _timer.schedule(new VSAuctionEndTask(this, auction, handler), duration * 1000L);
     }
 
     @Override
-    public synchronized VSAuction[] getAuctions()
+    public VSAuction[] getAuctions()
     {
-        VSAuction[] result = new VSAuction[_auctions.size()];
-        
-        for(int i = 0; i < _auctions.size(); i++)
+        Collection<VSAuction> values;
+
+        synchronized (_lock)
         {
-            result[i] = _auctions.get(i).getAuction();
+            values = _auctions.values();
         }
-        
-        return result;
+
+        return (VSAuction[]) values.toArray();
     }
 
     @Override
-    public  boolean placeBid(String userName, String auctionName, int price, VSAuctionEventHandler handler) throws VSAuctionException
+    public boolean placeBid(String userName, String auctionName, int price, VSAuctionEventHandler handler) throws VSAuctionException
     {
-    	InternalAuction auction = null;
-    	synchronized(this)
-    	{
-        
-        
-        for(int i = 0; i < _auctions.size(); i++)
-            if(_auctions.get(i).getAuction().getName().equals(auctionName))
-                auction = _auctions.get(i);
-        
-        if(auction == null)
-            throw new VSAuctionException("An auction with the specified name does not exist.");
-    	}
-        AuctionUser user = auction.getUser(userName);
-        
-        if(user == null)
+        VSAuction auction;
+        VSAuctionEventHandler oldHandler = null;
+
+        synchronized (_lock)
         {
-            user = auction.addUser(userName, price);
-        }
-        else
-        {
-            user.setBiddenAmount(price);
-        }
-        
-        user.addEventHandler(handler);
-        
-        return auction.getHighest() == user;
-    }
-    
-    private class AuctionUser
-    {
-        private final String _name;
-        private final ArrayList<VSAuctionEventHandler> _handlers = new ArrayList<>();
-        private final InternalAuction _auction;
-        
-        private int _biddenAmount;
-        
-        public AuctionUser(InternalAuction auction, String name, int biddenAmount)
-        {
-            if(auction == null)
-                throw new IllegalArgumentException("The argument 'auction' must not be null.");
-            
-            if(name == null)
-                throw new IllegalArgumentException("The argument 'name' must not be null.");
-            
-            if(biddenAmount <= 0)
-                throw new IllegalArgumentException("The argument 'biddenAmount' must neither be zero nor negative.");
-            
-            _name = name;
-            _biddenAmount = biddenAmount;
-            _auction = auction;
-        }
-        
-        public String getName() 
-        {
-            return _name;
-        }
-        
-        public int getBiddenAmount()
-        {
-            return _biddenAmount;
-        }
-        
-        public void setBiddenAmount(int value)
-        {
-            if(value <= 0)
-                throw new IllegalArgumentException("The argument 'value' must neither be zero nor negative.");
-            
-            if(value <= _biddenAmount)
-                return;
-            
-            _biddenAmount = value;
-            
-            _auction.tryOverbidHighest(this);
-        }
-        
-        public void addEventHandler(VSAuctionEventHandler handler)
-        {
-            if(handler == null)
-                throw new IllegalArgumentException("The argument 'handler' must not be null.");
-            
-            if(_handlers.contains(handler))
-                return;
-            
-            _handlers.add(handler);
-        }
-        
-        public void removeEventHandler(VSAuctionEventHandler handler)
-        {
-            if(handler == null)
-                throw new IllegalArgumentException("The argument 'handler' must not be null.");
-            
-            _handlers.remove(handler);
-        }
-        
-        // The user won the auction.
-        public void won()
-        {
-            for(VSAuctionEventHandler handler : _handlers)
+            auction = _auctions.get(auctionName);
+
+            if (auction.price < price)
             {
-                try 
-                {
-                    handler.handleEvent(VSAuctionEventType.AUCTION_WON, _auction.getAuction());
-                }
-                catch (RemoteException exc) 
-                {
-                    System.out.println("Error on callback: ");
-                    System.out.println(exc);
-                }
+                oldHandler = _highest.put(auction, handler);
+                auction.price = price;
             }
         }
-        
-        // The user was overbidden.
-        public void overbid()
+
+        if (oldHandler != null)
         {
-            for(VSAuctionEventHandler handler : _handlers)
-            {
-                try 
-                {
-                    handler.handleEvent(VSAuctionEventType.HIGHER_BID, _auction.getAuction());
-                }
-                catch (RemoteException exc) 
-                {
-                    System.out.println("Error on callback: ");
-                    System.out.println(exc);
-                }
-            }
+            Thread callbackThread = new Thread(new VSAuctionCallbackRunnable(oldHandler, VSAuctionEventType.HIGHER_BID, auction));
+
+            callbackThread.start();
+
+            return true;
         }
+
+        return false;
     }
-    
-    private class InternalAuction
+
+    private static final class VSAuctionEndTask extends TimerTask
     {
+
         private final VSAuction _auction;
-        private final int _duration;
-        private final VSAuctionEventHandler _handler;
-        private final ArrayList<AuctionUser> _users = new ArrayList<>();
-        
-        private AuctionUser _highest = null;
-        
-        private final Timer timer = new Timer();
-        
-        public InternalAuction(VSAuction auction, VSAuctionEventHandler handler, int duration)
+        private final VSAuctionEventHandler _creatorHandle;
+        private final VSAuctionServiceImpl _owner;
+
+        public VSAuctionEndTask(VSAuctionServiceImpl owner, VSAuction auction, VSAuctionEventHandler creatorHandle)
         {
-            if(auction == null)
+            if (owner == null)
+            {
+                throw new IllegalArgumentException("The argument 'owner' must not be null.");
+            }
+
+            if (auction == null)
+            {
                 throw new IllegalArgumentException("The argument 'auction' must not be null.");
-            
-            if(handler == null)
-                throw new IllegalArgumentException("The argument 'handler' must not be null.");
-            
-            if(duration < 0)
-                throw new IllegalArgumentException("The argument 'duration' must not be negative.");
-            
+            }
+
+            if (creatorHandle == null)
+            {
+                throw new IllegalArgumentException("The argument 'creatorHandle' must not be null.");
+            }
+
+            _owner = owner;
             _auction = auction;
+            _creatorHandle = creatorHandle;
+        }
+
+        @Override
+        public void run()
+        {
+            VSAuctionEventHandler _highestHandler;
+
+            // The auction is over.
+            // First remove the auction from the hash table.
+            synchronized (_owner._lock)
+            {
+                _owner._auctions.remove(_auction.getName());
+
+                _highestHandler = _owner._highest.remove(_auction);
+            }
+
+            //Now we have the handler of the user with the highest bid.
+            if (_highestHandler != null)
+            {
+                Thread callbackThread = new Thread(new VSAuctionCallbackRunnable(_highestHandler, VSAuctionEventType.AUCTION_WON, _auction));
+
+                callbackThread.start();
+            }
+
+            // Inform the auction creator
+            Thread callbackThread = new Thread(new VSAuctionCallbackRunnable(_creatorHandle, VSAuctionEventType.AUCTION_END, _auction));
+
+            callbackThread.start();
+        }
+    }
+
+    private static final class VSAuctionCallbackRunnable implements Runnable
+    {
+
+        private final VSAuctionEventHandler _handler;
+        private final VSAuctionEventType _type;
+        private final VSAuction _auction;
+
+        public VSAuctionCallbackRunnable(VSAuctionEventHandler handler, VSAuctionEventType type, VSAuction auction)
+        {
+            if (auction == null)
+            {
+                throw new IllegalArgumentException("The argument 'auction' must not be null.");
+            }
+
+            if (handler == null)
+            {
+                throw new IllegalArgumentException("The argument 'handler' must not be null.");
+            }
+
+            if (type == null)
+            {
+                throw new IllegalArgumentException("The argument 'type' must not be null.");
+            }
+
             _handler = handler;
-            _duration = duration;
-            
-            timer.schedule(new TimerTask()
+            _auction = auction;
+            _type = type;
+        }
+
+        @Override
+        public void run()
+        {
+            try
             {
-                @Override
-                public void run()
-                {
-                  end();
-                }
-            }, (long)duration * 1000);
-        }
-        
-        public VSAuction getAuction()
-        {
-            return _auction;
-        }
-        
-        public int getDuration()
-        {
-            return _duration;
-        }
-        
-        public List<AuctionUser> getUsers()
-        {
-            return Collections.unmodifiableList(_users);
-        }
-        
-        public AuctionUser getUser(String name)
-        {
-            if(name == null)
-                throw new IllegalArgumentException("The argument 'name' must not be null");
-            
-            for(AuctionUser user : _users)
-                if(user.getName().equals(name))
-                    return user;
-            
-            return null;
-        }
-        
-        public AuctionUser addUser(String name, int biddenAmount)
-        {
-            if(name == null)
-                throw new IllegalArgumentException("The argument 'name' must not be null.");
-            
-            if(getUser(name) != null)
-                throw new IllegalArgumentException("A user with the specified name is already present.");
-            
-            AuctionUser user = new AuctionUser(this, name, biddenAmount);
-            
-            _users.add(user);
-            
-            tryOverbidHighest(user);
-            
-            return user;
-        }
-        
-        public AuctionUser getHighest()
-        {
-            return _highest;
-        }
-        
-        void tryOverbidHighest(AuctionUser user)
-        {
-            if(user.getBiddenAmount() > _auction.getPrice() || 
-               (_highest == null && user.getBiddenAmount() == _auction.getPrice()))
-            {
-                AuctionUser overbidden = _highest;
-                
-                _highest = user;
-                
-                _auction.price = user.getBiddenAmount();
-                
-                if(overbidden != null)
-                {
-                    overbidden.overbid();
-                }
+                _handler.handleEvent(_type, _auction);
             }
-        }
-        
-        private void end()
-        {
-            if(_highest != null)
+            catch (RemoteException exc)
             {
-                _highest.won();
-            }
-            
-            try 
-            {
-                _handler.handleEvent(VSAuctionEventType.AUCTION_END, _auction);
-            } 
-            catch (RemoteException exc) 
-            {
-                System.out.println("Error on callback: ");
+                System.out.println("Error on calling back client:");
                 System.out.println(exc);
             }
         }
+
     }
 }
