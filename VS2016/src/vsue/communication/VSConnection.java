@@ -7,7 +7,7 @@ public class VSConnection
 {
     private final Socket _socket;
     
-    protected VSConnection(Socket socket) 
+    public VSConnection(Socket socket) 
     {
         if(socket == null)
             throw new IllegalArgumentException("The argument 'socket' must not be null.");
