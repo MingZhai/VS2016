@@ -28,7 +28,7 @@ public class VSInvocationHandler implements InvocationHandler, Serializable
         VSConnection connection = new VSConnection(socket);
         VSObjectConnection objectConnection = new VSObjectConnection(connection);
         
-        VSMethodInvocationRequestMessage request = new VSMethodInvocationRequestMessage(_remoteReference.getObjectID(), method.getName(), args);
+        VSMethodInvocationRequestMessage request = new VSMethodInvocationRequestMessage(_remoteReference.getObjectID(), method.toGenericString(), args);
         
         objectConnection.sendObject(request);
         
@@ -45,7 +45,6 @@ public class VSInvocationHandler implements InvocationHandler, Serializable
             {
                 if(!(allowedExceptionType instanceof Class<?>))
                     continue;
-                
                 
                 if(((Class<?>)allowedExceptionType).isAssignableFrom(exc.getClass()))
                 {
