@@ -28,7 +28,7 @@ public class VSAuctionRMIServer
         
         try
         {
-            stub = (VSAuctionService) UnicastRemoteObject.exportObject(serviceImplementation, 1099);
+            stub = (VSAuctionService) UnicastRemoteObject.exportObject(serviceImplementation, 0);
         }
         catch (RemoteException exc)
         {

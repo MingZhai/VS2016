@@ -3,17 +3,16 @@ package vsue.rmi;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.Serializable;
+import java.rmi.NoSuchObjectException;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 public class VSAuctionRMIClient implements VSAuctionEventHandler
 {
+
     /* The user name provided via command line. */
     private final String userName;
     private Registry _registry;
@@ -22,8 +21,6 @@ public class VSAuctionRMIClient implements VSAuctionEventHandler
     public VSAuctionRMIClient(String userName)
     {
         this.userName = userName;
-        
-        
     }
 
     // #############################
@@ -31,14 +28,17 @@ public class VSAuctionRMIClient implements VSAuctionEventHandler
     // #############################
     public void init(String registryHost, int registryPort)
     {
-    	
-    	try {
-			UnicastRemoteObject.exportObject(this, 0);
-		} catch (RemoteException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-    	
+        try
+        {
+            UnicastRemoteObject.exportObject(this, 0);
+        }
+        catch (RemoteException exc)
+        {
+            System.err.println("Unable to export handler:");
+            System.err.println(exc.getMessage());
+            System.exit(1);
+        }
+
         try
         {
             _registry = LocateRegistry.getRegistry(registryHost, registryPort);
@@ -82,7 +82,16 @@ public class VSAuctionRMIClient implements VSAuctionEventHandler
 
     public void shutdown()
     {
-        
+        try
+        {
+            UnicastRemoteObject.unexportObject(this, true);
+        }
+        catch (NoSuchObjectException exc)
+        {
+            System.err.println("Unable to remove handler:");
+            System.err.println(exc.getMessage());
+            System.exit(1);
+        }
     }
 
     // #################
@@ -100,7 +109,7 @@ public class VSAuctionRMIClient implements VSAuctionEventHandler
     public void register(String auctionName, int duration, int startingPrice)
     {
         VSAuction auction = new VSAuction(auctionName, startingPrice);
-        
+
         try
         {
             _service.registerAuction(auction, duration, this);
@@ -129,12 +138,12 @@ public class VSAuctionRMIClient implements VSAuctionEventHandler
             System.exit(1);
         }
 
-        if(auctions == null)
+        if (auctions == null)
         {
             System.err.println("Unable to lookup auctions.");
             System.exit(1);
         }
-        
+
         for (VSAuction a : auctions)
         {
             System.out.println(a.getName());
@@ -179,15 +188,21 @@ public class VSAuctionRMIClient implements VSAuctionEventHandler
                 break;
             }
             if (command == null)
+            {
                 break;
+            }
 
             if (command.isEmpty())
+            {
                 continue;
+            }
 
             // Prepare command
             String[] args = command.split(" ");
             if (args.length == 0)
+            {
                 continue;
+            }
 
             args[0] = args[0].toLowerCase();
 
@@ -195,7 +210,9 @@ public class VSAuctionRMIClient implements VSAuctionEventHandler
             try
             {
                 if (!processCommand(args))
+                {
                     break;
+                }
             }
             catch (IllegalArgumentException iae)
             {
@@ -221,7 +238,9 @@ public class VSAuctionRMIClient implements VSAuctionEventHandler
             case "register":
             case "r":
                 if (args.length < 3)
+                {
                     throw new IllegalArgumentException("Usage: register <auction-name> <duration> [<starting-price>]");
+                }
                 int duration = Integer.parseInt(args[2]);
                 int startingPrice = (args.length > 3) ? Integer.parseInt(args[3]) : 0;
                 register(args[1], duration, startingPrice);
@@ -233,7 +252,9 @@ public class VSAuctionRMIClient implements VSAuctionEventHandler
             case "bid":
             case "b":
                 if (args.length < 3)
+                {
                     throw new IllegalArgumentException("Usage: bid <auction-name> <price>");
+                }
                 int price = Integer.parseInt(args[2]);
                 bid(args[1], price);
                 break;
